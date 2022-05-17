@@ -1,0 +1,4 @@
+py-solc-x
+web3
+hexbytes
+pytest
