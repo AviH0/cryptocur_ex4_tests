@@ -4,6 +4,9 @@ from typing import Any
 import pytest
 from commit import *
 
+GANACHE_PORT = 7545
+
+
 # run the line below to install the compiler ->  only once is needed.
 solcx.install_solc(version='latest')
 
@@ -25,7 +28,7 @@ bytecode, abi = compile("RPS.sol")
 
 
 # Connect to the blockchain: (Ganache should be running at this port)
-w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:7545"))
+w3 = Web3(Web3.HTTPProvider(f"http://127.0.0.1:{GANACHE_PORT}"))
 
 
 def deploy_rps(account_number, reveal_delay):
@@ -55,8 +58,8 @@ def rps_1_block_delay():
     return rps
 
 @pytest.fixture
-def rps_2_block_delay():
-    rps = deploy_rps(0, 2)
+def rps_5_block_delay():
+    rps = deploy_rps(0, 5)
     for i in range(10):
         tx_hash = w3.eth.send_transaction({
         'to': rps.address,

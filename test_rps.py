@@ -1,3 +1,4 @@
+from eth_typing import BlockNumber
 import pytest
 from deploy import *
 from commit import *
@@ -310,3 +311,125 @@ def test_player_invalid_move(rps_1_block_delay, user_1, user_2, user_3, key_1, k
         # user_2 did not use key_1
         tx_hash = rps.functions.reveal_move(game_id, move_1, key_1).transact({'from': user_2})
         tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+def test_reveal_phase_ends_1(rps_1_block_delay, user_1, user_2, key_1, key_2):
+    rps = rps_1_block_delay
+    user_1_init_balance = rps.functions.balanceOf(user_1).call()
+    user_2_init_balance = rps.functions.balanceOf(user_2).call()
+
+    move_1 = 1 # Rock
+    move_2 = 2 # Paper
+
+    move_1_hidden = get_commit(move_1, key_1)
+    move_2_hidden = get_commit(move_2, key_2)
+
+    game_id = 1
+
+    bet_amount = 50
+
+    assert rps.functions.get_game_state(game_id).call() == NO_GAME
+
+    tx_hash = rps.functions.make_move(game_id, bet_amount, move_1_hidden).transact({'from': user_1})
+    tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+    user_1_new_balance = rps.functions.balanceOf(user_1).call()
+    assert user_1_init_balance - user_1_new_balance == bet_amount
+
+    assert rps.functions.get_game_state(game_id).call() == MOVE1
+
+    tx_hash = rps.functions.make_move(game_id, 0, move_2_hidden).transact({'from': user_2})
+    tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+    user_2_new_balance = rps.functions.balanceOf(user_2).call()
+    assert user_2_init_balance - user_2_new_balance == bet_amount
+
+    assert rps.functions.get_game_state(game_id).call() == MOVE2
+
+    
+
+    tx_hash = rps.functions.reveal_move(game_id, move_1, key_1).transact({'from': user_1})
+    tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+    with pytest.raises(ContractLogicError) as e_info:
+        # player 2 cannot end phase
+        tx_hash = rps.functions.reveal_phase_ended(game_id).transact({'from': user_2})
+        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+    tx_hash = rps.functions.reveal_phase_ended(game_id).transact({'from': user_1})
+    w3.eth.wait_for_transaction_receipt(tx_hash)
+    
+    assert rps.functions.get_game_state(game_id).call() == NO_GAME
+
+    assert rps.functions.balanceOf(user_2).call() == user_2_init_balance - bet_amount
+
+    assert rps.functions.balanceOf(user_1).call() == user_1_init_balance + bet_amount
+
+
+def test_reveal_phase_ends_5(rps_5_block_delay, user_1, user_2, key_1, key_2):
+    rps = rps_5_block_delay
+    user_1_init_balance = rps.functions.balanceOf(user_1).call()
+    user_2_init_balance = rps.functions.balanceOf(user_2).call()
+
+    move_1 = 1 # Rock
+    move_2 = 2 # Paper
+
+    move_1_hidden = get_commit(move_1, key_1)
+    move_2_hidden = get_commit(move_2, key_2)
+
+    game_id = 1
+
+    bet_amount = 50
+
+    assert rps.functions.get_game_state(game_id).call() == NO_GAME
+
+    tx_hash = rps.functions.make_move(game_id, bet_amount, move_1_hidden).transact({'from': user_1})
+    tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+    user_1_new_balance = rps.functions.balanceOf(user_1).call()
+    assert user_1_init_balance - user_1_new_balance == bet_amount
+
+    assert rps.functions.get_game_state(game_id).call() == MOVE1
+
+    tx_hash = rps.functions.make_move(game_id, 0, move_2_hidden).transact({'from': user_2})
+    tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+    user_2_new_balance = rps.functions.balanceOf(user_2).call()
+    assert user_2_init_balance - user_2_new_balance == bet_amount
+
+    assert rps.functions.get_game_state(game_id).call() == MOVE2
+
+    
+
+    tx_hash = rps.functions.reveal_move(game_id, move_1, key_1).transact({'from': user_1})
+    tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+    reveal_block_num = w3.eth.block_number
+    assert rps.functions.get_game_state(game_id).call() == REVEAL1
+
+    with pytest.raises(ContractLogicError) as e_info:
+        # reveal phase not ended yet
+        tx_hash = rps.functions.reveal_phase_ended(game_id).transact({'from': user_1})
+        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+    # get one block mined:
+    for _ in range(5):
+        tx_hash = w3.eth.send_transaction({'from': user_1, 'to': user_2, 'value': 1})
+        w3.eth.wait_for_transaction_receipt(tx_hash)
+    
+    assert reveal_block_num + 5 == w3.eth.block_number
+
+    assert rps.functions.get_game_state(game_id).call() == LATE
+
+
+    with pytest.raises(ContractLogicError) as e_info:
+        # player 2 cannot end phase
+        tx_hash = rps.functions.reveal_phase_ended(game_id).transact({'from': user_2})
+        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+
+    tx_hash = rps.functions.reveal_phase_ended(game_id).transact({'from': user_1})
+    w3.eth.wait_for_transaction_receipt(tx_hash)
+    
+    assert rps.functions.get_game_state(game_id).call() == NO_GAME
+
+    assert rps.functions.balanceOf(user_2).call() == user_2_init_balance - bet_amount
+
+    assert rps.functions.balanceOf(user_1).call() == user_1_init_balance + bet_amount
